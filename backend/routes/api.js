@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const axios = require('axios');
 const { ensureAuthenticated } = require('../middleware/auth');
-const { Settings, Log, Punishment, Warning, AuditLog, Subscription, DetectionLog, UserInfraction, GuildAnalytics, DeletedMessage, HistoricalScanJob, Notification, HistoryScan, ThreatEvent, ModerationAction, DashboardStats, UsageStats, License } = require('../models');
+const { Guild, Settings, Log, Punishment, Warning, AuditLog, Subscription, DetectionLog, UserInfraction, GuildAnalytics, DeletedMessage, HistoricalScanJob, Notification, HistoryScan, ThreatEvent, ModerationAction, DashboardStats, UsageStats, License } = require('../models');
 const { activeScans, startHistoricalScan, cancelHistoricalScan, resumeHistoricalScan } = require('../helpers/scanner');
 const { recalculateDashboardStats } = require('../helpers/statsUpdater');
 
