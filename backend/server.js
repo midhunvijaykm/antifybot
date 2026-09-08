@@ -125,16 +125,19 @@ app.use(xss());
 // 4. HTTP Parameter Pollution Protection
 app.use(hpp());
 
-// Apply rate limiter to all API endpoints
+// Apply rate limiter to general API endpoints
 app.set('trust proxy', 1);
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
+  max: 1000,
+  skip: (req) => {
+    const url = req.originalUrl || req.url || '';
+    return url.includes('/auth/login') || url.includes('/auth/callback') || url === '/health';
+  },
   message: { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use('/api', apiLimiter);
 
 // ==============================
 // ENV VARIABLES
@@ -213,7 +216,7 @@ app.use(passport.initialize());
 
 app.use('/api/auth', authRoutes);
 
-app.use('/api', apiRoutes);
+app.use('/api', apiLimiter, apiRoutes);
 
 // ==============================
 // ROOT ROUTE
