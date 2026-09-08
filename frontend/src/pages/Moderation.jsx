@@ -1,36 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  Shield, Hourglass, Ban, AlertTriangle, ShieldAlert, CheckCircle, 
-  Trash2, Eye, Clock, RotateCcw, ShieldCheck, FileText, Search, History,
-  ArrowRight, ShieldX, Check, AlertCircle, ArrowLeft, ArrowRightSquare, Globe,
-  MoreVertical, ChevronDown
+  Shield, CheckCircle, Eye, Clock, RotateCcw, FileText, Search, History,
+  ArrowRight, ArrowLeft, ShieldCheck, Globe, MoreVertical
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import PremiumGate from '../components/PremiumGate';
 import './Moderation.css';
-
-// Dynamic Countdown Timer Component for timeouts
-const TimeoutTimer = ({ createdAt, duration }) => {
-  const targetTime = new Date(createdAt).getTime() + duration;
-  const [timeLeft, setTimeLeft] = useState(() => Math.max(0, targetTime - Date.now()));
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const diff = Math.max(0, targetTime - Date.now());
-      setTimeLeft(diff);
-      if (diff <= 0) clearInterval(interval);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [targetTime]);
-
-  if (timeLeft <= 0) return <span className="text-muted">Expired</span>;
-  
-  const minutes = Math.floor(timeLeft / 60000);
-  const seconds = Math.floor((timeLeft % 60000) / 1000);
-  return <strong className="text-purple" style={{ color: '#a78bfa' }}>{minutes}m {seconds}s</strong>;
-};
 
 const Moderation = () => {
   const getChannelBadgeLabel = (type) => {
@@ -54,7 +31,6 @@ const Moderation = () => {
     moderationLoading,
     auditLogs,
     deletedMessages,
-    logs,
     historyScans,
     historyScansPagination,
     historyScansLoading,
@@ -63,16 +39,10 @@ const Moderation = () => {
     fetchDeletedMessages,
     fetchHistoryScans,
     removeTimeout,
-    editTimeoutDuration,
     unbanUser,
     deleteWarning,
-    revertAction,
-    submitAppeal,
     handleAppeal,
-    editPunishment,
-    revokePunishment,
     markFalsePositive,
-    addAlert,
     premium,
     user
   } = useStore();
@@ -115,14 +85,14 @@ const Moderation = () => {
       fetchAuditLogs(activeGuild.id);
       fetchDeletedMessages(activeGuild.id);
     }
-  }, [activeGuild, fetchModerationData, fetchAuditLogs, fetchDeletedMessages]);
+  }, [activeGuild?.id, activeGuild?.botActive, fetchModerationData, fetchAuditLogs, fetchDeletedMessages]);
 
   // Fetch HistoryScans if tab is active or filters change
   useEffect(() => {
     if (activeGuild?.id && activeGuild?.botActive && activeSubTab === 'history') {
       fetchHistoryScans(activeGuild.id, historyPage, historySearch, historyRisk, historyAction);
     }
-  }, [activeGuild?.id, activeSubTab, historyPage, historySearch, historyRisk, historyAction, fetchHistoryScans]);
+  }, [activeGuild?.id, activeGuild?.botActive, activeSubTab, historyPage, historySearch, historyRisk, historyAction, fetchHistoryScans]);
 
   if (!activeGuild) {
     return (
@@ -144,20 +114,23 @@ const Moderation = () => {
     );
   }
 
-  const punishments = moderationData?.punishments || [];
-  const warnings = moderationData?.warnings || [];
-  const appeals = (punishments || []).filter(p => p.appealStatus && p.appealStatus !== 'None');
+  const punishments = Array.isArray(moderationData?.punishments) ? moderationData.punishments : [];
+  const warnings = Array.isArray(moderationData?.warnings) ? moderationData.warnings : [];
+  const safeDeletedMessages = Array.isArray(deletedMessages) ? deletedMessages : [];
+  const safeHistoryScans = Array.isArray(historyScans) ? historyScans : [];
+  const safeAuditLogs = Array.isArray(auditLogs) ? auditLogs : [];
+  const appeals = punishments.filter(p => p.appealStatus && p.appealStatus !== 'None');
 
   // Unified "Recent Actions" combining warnings, timeouts, kicks, bans
   const unifiedActions = [
-    ...(warnings || []).map(w => ({
+    ...warnings.map(w => ({
       ...w,
       unifiedType: 'Warning',
       actionDate: w.createdAt,
       targetId: w._id,
       isActive: w.active && !w.falsePositive
     })),
-    ...(punishments || []).map(p => ({
+    ...punishments.map(p => ({
       ...p,
       unifiedType: p.type,
       actionDate: p.createdAt,
@@ -176,15 +149,15 @@ const Moderation = () => {
     .sort((a, b) => new Date(b.actionDate) - new Date(a.actionDate));
 
   // Count active stats for badges
-  const activePunishmentsCount = (punishments || []).filter(p => p.active && !p.expired && !p.revoked).length;
-  const warningListCount = (warnings || []).filter(w => w.active).length;
-  const appealsCount = (punishments || []).filter(p => p.appealStatus === 'Pending').length;
+  const activePunishmentsCount = punishments.filter(p => p.active && !p.expired && !p.revoked).length;
+  const warningListCount = warnings.filter(w => w.active).length;
+  const appealsCount = punishments.filter(p => p.appealStatus === 'Pending').length;
 
   // Selected Evidence logic
-  let selectedEvidence = (deletedMessages || []).find(m => m._id === selectedEvidenceId || m.messageId === selectedEvidenceId);
-  if (!selectedEvidence && (historyScans || []).length > 0) {
+  let selectedEvidence = safeDeletedMessages.find(m => m._id === selectedEvidenceId || m.messageId === selectedEvidenceId);
+  if (!selectedEvidence && safeHistoryScans.length > 0) {
     // Check if the selectedEvidenceId matches a history scan record's evidenceId or data
-    const matchedScan = (historyScans || []).find(s => s.evidenceId === selectedEvidenceId || s._id === selectedEvidenceId);
+    const matchedScan = safeHistoryScans.find(s => s.evidenceId === selectedEvidenceId || s._id === selectedEvidenceId);
     if (matchedScan) {
       selectedEvidence = {
         _id: matchedScan.evidenceId || matchedScan._id,
@@ -205,8 +178,8 @@ const Moderation = () => {
     }
   }
   // Default to first deleted message if none selected
-  if (!selectedEvidence && (deletedMessages || []).length > 0) {
-    selectedEvidence = (deletedMessages || [])[0];
+  if (!selectedEvidence && safeDeletedMessages.length > 0) {
+    selectedEvidence = safeDeletedMessages[0];
   }
 
   // Navigation menu items
@@ -215,7 +188,7 @@ const Moderation = () => {
     { id: 'history', label: 'HistoryScan Results', icon: History },
     { id: 'evidence', label: 'Evidence Viewer', icon: Eye },
     { id: 'appeals', label: 'Appeals Panel', icon: CheckCircle, count: appealsCount },
-    { id: 'falsepositives', label: 'False Positive Review', icon: RotateCcw, count: (deletedMessages || []).filter(m => m.falsePositive).length },
+    { id: 'falsepositives', label: 'False Positive Review', icon: RotateCcw, count: safeDeletedMessages.filter(m => m.falsePositive).length },
     { id: 'auditlogs', label: 'Audit Logs', icon: FileText }
   ];
 
@@ -328,7 +301,6 @@ const Moderation = () => {
                         <tbody>
                           {(unifiedActions || []).slice(0, 30).map((act, idx) => {
                             const actEvidence = (deletedMessages || []).find(m => m._id === act.evidenceId || m.messageId === act.evidenceId);
-                            const channelType = actEvidence?.channelType || 'GuildText';
                             const channelName = actEvidence?.channelName || '';
                             
                             return (
@@ -1123,7 +1095,7 @@ const Moderation = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {(auditLogs || []).map(log => (
+                          {safeAuditLogs.map(log => (
                             <tr key={log._id}>
                               <td><strong>{log.adminName}</strong></td>
                               <td>

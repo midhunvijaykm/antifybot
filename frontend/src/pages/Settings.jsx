@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Eye, Settings as SettingsIcon, Save, Plus, Volume2, UserCheck, MessageSquare } from 'lucide-react';
+import { useState } from 'react';
+import { Shield, Save, Plus, Volume2, UserCheck, MessageSquare, Settings as SettingsIcon } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -26,21 +26,16 @@ const Settings = () => {
   const [newChannel, setNewChannel] = useState('');
   const [newAnnChannel, setNewAnnChannel] = useState('');
 
-  // Local state for text-input configurations (saved on Save click)
-  const [loggingChannel, setLoggingChannel] = useState('');
-  const [welcomeChannel, setWelcomeChannel] = useState('');
-  const [welcomeText, setWelcomeText] = useState('');
-  const [autorole, setAutorole] = useState('');
+  // Local state drafts for text-input configurations (derived from settings with fallback)
+  const [draftLoggingChannel, setLoggingChannel] = useState(null);
+  const [draftWelcomeChannel, setWelcomeChannel] = useState(null);
+  const [draftWelcomeText, setWelcomeText] = useState(null);
+  const [draftAutorole, setAutorole] = useState(null);
 
-  // Sync inputs with settings data
-  useEffect(() => {
-    if (settings) {
-      setLoggingChannel(settings.loggingChannelId || '');
-      setWelcomeChannel(settings.welcomeChannelId || '');
-      setWelcomeText(settings.welcomeMessageText || 'Welcome {user} to the server! Make sure to verify.');
-      setAutorole(settings.autoroleId || '');
-    }
-  }, [settings]);
+  const loggingChannel = draftLoggingChannel !== null ? draftLoggingChannel : (settings?.loggingChannelId || '');
+  const welcomeChannel = draftWelcomeChannel !== null ? draftWelcomeChannel : (settings?.welcomeChannelId || '');
+  const welcomeText = draftWelcomeText !== null ? draftWelcomeText : (settings?.welcomeMessageText || 'Welcome {user} to the server! Make sure to verify.');
+  const autorole = draftAutorole !== null ? draftAutorole : (settings?.autoroleId || '');
 
   if (!activeGuild) {
     return (

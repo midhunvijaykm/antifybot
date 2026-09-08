@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { BarChart3, Image, ShieldAlert, FileText, Zap, RefreshCw, Download } from 'lucide-react';
+import { Image, ShieldAlert, FileText, Zap, RefreshCw, Download } from 'lucide-react';
 import { apiService } from '../services/api';
 import './UsageLimits.css';
 

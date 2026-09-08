@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { Check, Star, Zap, Crown, ShieldCheck, Sparkles, CreditCard } from 'lucide-react';
+import { useState } from 'react';
+import { Check, Star, Zap, ShieldCheck, Sparkles } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import './Premium.css';
 
-const PricingCard = ({ tier, price, icon: Icon, features, isActivePlan, isPopular, onSubscribe, loading, hasCheckoutOptions }) => {
+const PricingCard = ({ tier, price, icon: Icon, features, isActivePlan, isPopular, onSubscribe, loading, _hasCheckoutOptions }) => {
   const [selectedProvider, setSelectedProvider] = useState('Stripe');
 
   return (

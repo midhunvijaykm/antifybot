@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, CheckCircle2, ArrowRight } from 'lucide-react';
-import { useStore } from '../store/useStore';
 import './PremiumGate.css';
 
 const PremiumGate = ({

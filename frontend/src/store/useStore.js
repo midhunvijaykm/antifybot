@@ -112,7 +112,7 @@ export const useStore = create((set, get) => ({
         authLoading: false 
       });
       get().fetchGuilds();
-    } catch (error) {
+    } catch {
       console.log('Session check failed (User not logged in or backend offline).');
       if (socketConnection) {
         socketConnection.disconnect();
@@ -143,15 +143,16 @@ export const useStore = create((set, get) => ({
     set({ guildsLoading: true });
     try {
       const guilds = await apiService.fetchGuilds();
-      set({ guilds: guilds || [], guildsLoading: false });
+      const safeGuilds = Array.isArray(guilds) ? guilds : [];
+      set({ guilds: safeGuilds, guildsLoading: false });
       
       // Determine guild to auto-select (persisted or bot-active or first item)
-      if (guilds.length > 0) {
+      if (safeGuilds.length > 0) {
         const lastGuildId = localStorage.getItem('antify_last_guild_id');
-        const persistedGuild = guilds.find(g => g.id === lastGuildId);
-        const botActiveGuild = guilds.find(g => g.botActive);
+        const persistedGuild = safeGuilds.find(g => g.id === lastGuildId);
+        const botActiveGuild = safeGuilds.find(g => g.botActive);
         
-        const targetGuild = persistedGuild || botActiveGuild || guilds[0];
+        const targetGuild = persistedGuild || botActiveGuild || safeGuilds[0];
         get().setActiveGuild(targetGuild);
       }
     } catch (error) {
@@ -399,7 +400,7 @@ export const useStore = create((set, get) => ({
   // ACTIONS - HISTORICAL SCANNING
   // ==============================
   fetchScanStatus: async (guildId) => {
-    if (!guildId) return;
+    if (!guildId || !/^\d{17,20}$/.test(guildId)) return;
     try {
       const data = await apiService.fetchScanStatus(guildId);
       if (data.active) {
@@ -430,7 +431,7 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ scanLoading: true });
     try {
-      const data = await apiService.cancelScan(guildId);
+      await apiService.cancelScan(guildId);
       set({
         scanProgress: {
           ...get().scanProgress,
@@ -577,9 +578,10 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     try {
       const data = await apiService.fetchAuditLogs(guildId);
-      set({ auditLogs: data || [] });
+      set({ auditLogs: Array.isArray(data) ? data : [] });
     } catch (error) {
       console.error('Fetch audit logs failed:', error.message);
+      set({ auditLogs: [] });
     }
   },
 
@@ -656,10 +658,13 @@ export const useStore = create((set, get) => ({
     set({ notificationsLoading: true });
     try {
       const notifications = await apiService.fetchNotifications(guildId);
-      set({ notifications: notifications || [], notificationsLoading: false });
+      set({ 
+        notifications: Array.isArray(notifications) ? notifications : [], 
+        notificationsLoading: false 
+      });
     } catch (error) {
       console.error('Fetch notifications failed:', error.message);
-      set({ notificationsLoading: false });
+      set({ notifications: [], notificationsLoading: false });
     }
   },
 
@@ -667,7 +672,7 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     try {
       const data = await apiService.markAllNotificationsRead(guildId);
-      if (data.success) {
+      if (data && data.success && Array.isArray(data.notifications)) {
         set({ notifications: data.notifications });
       }
     } catch (error) {
@@ -679,9 +684,9 @@ export const useStore = create((set, get) => ({
     if (!guildId || !notificationId) return;
     try {
       const data = await apiService.markNotificationRead(guildId, notificationId);
-      if (data.success) {
+      if (data && data.success) {
         set(state => ({
-          notifications: (state.notifications || []).map(n => 
+          notifications: (Array.isArray(state.notifications) ? state.notifications : []).map(n => 
             n._id === notificationId ? { ...n, read: true } : n
           )
         }));
@@ -811,7 +816,7 @@ export const useStore = create((set, get) => ({
       // Handle real-time notifications
       socketConnection.on('notification_new', (notification) => {
         set(state => {
-          const currentList = state.notifications || [];
+          const currentList = Array.isArray(state.notifications) ? state.notifications : [];
           if (currentList.some(n => n._id === notification._id)) {
             return {};
           }
@@ -821,7 +826,9 @@ export const useStore = create((set, get) => ({
             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-500.wav');
             audio.volume = 0.4;
             audio.play().catch(() => {});
-          } catch (e) {}
+          } catch {
+            // Audio playback not allowed or failed
+          }
 
           // Add alert toast
           let toastType = 'info';
@@ -835,9 +842,9 @@ export const useStore = create((set, get) => ({
         });
       });
 
-      socketConnection.on('notifications_read_all', (data) => {
+      socketConnection.on('notifications_read_all', () => {
         set(state => ({
-          notifications: (state.notifications || []).map(n => ({ ...n, read: true }))
+          notifications: (Array.isArray(state.notifications) ? state.notifications : []).map(n => ({ ...n, read: true }))
         }));
       });
 
@@ -848,7 +855,7 @@ export const useStore = create((set, get) => ({
       });
 
       // Handle moderation/appeals live updates
-      socketConnection.on('punishment_updated', (updatedPun) => {
+      socketConnection.on('punishment_updated', () => {
         const activeId = get().activeGuild?.id;
         if (activeId) {
           get().fetchModerationData(activeId);
@@ -856,7 +863,7 @@ export const useStore = create((set, get) => ({
         }
       });
 
-      socketConnection.on('warning_updated', (updatedWarn) => {
+      socketConnection.on('warning_updated', () => {
         const activeId = get().activeGuild?.id;
         if (activeId) {
           get().fetchModerationData(activeId);
@@ -864,14 +871,14 @@ export const useStore = create((set, get) => ({
         }
       });
 
-      socketConnection.on('appeal_new', (updatedPun) => {
+      socketConnection.on('appeal_new', () => {
         const activeId = get().activeGuild?.id;
         if (activeId) {
           get().fetchModerationData(activeId);
         }
       });
 
-      socketConnection.on('appeal_updated', (updatedPun) => {
+      socketConnection.on('appeal_updated', () => {
         const activeId = get().activeGuild?.id;
         if (activeId) {
           get().fetchModerationData(activeId);
@@ -919,7 +926,7 @@ export const useStore = create((set, get) => ({
 
       socketConnection.on('guild_removed', (removedGuildId) => {
         set(state => {
-          const updatedGuilds = (state.guilds || []).filter(g => g.id !== removedGuildId);
+          const updatedGuilds = (Array.isArray(state.guilds) ? state.guilds : []).filter(g => g.id !== removedGuildId);
           get().addAlert(`🤖 Bot removed from server.`, 'warning');
           
           let nextActive = state.activeGuild;

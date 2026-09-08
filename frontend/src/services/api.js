@@ -39,7 +39,7 @@ export const apiService = {
       try {
         const response = await axios.post(`${API_BASE_URL}/logout`);
         return handleResponse(response);
-      } catch (postErr) {
+      } catch {
         const response = await axios.get(`${API_BASE_URL}/logout`);
         return handleResponse(response);
       }

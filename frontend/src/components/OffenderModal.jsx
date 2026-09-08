@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { X, ShieldAlert, AlertTriangle, Hammer, Activity } from 'lucide-react';
-import Card from './Card';
+import { X, AlertTriangle, Hammer, Activity } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import './OffenderModal.css';
 

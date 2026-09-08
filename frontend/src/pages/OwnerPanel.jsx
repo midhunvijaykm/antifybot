@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { ShieldCheck, Search, Award, Trash2, Calendar, Globe, Power, CheckCircle, HelpCircle } from 'lucide-react';
+import { ShieldCheck, Search, Award, Trash2, Calendar, Power, HelpCircle } from 'lucide-react';
 import './OwnerPanel.css';
 
 const OwnerPanel = () => {

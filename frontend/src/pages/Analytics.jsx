@@ -1,6 +1,6 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { Mic, MessageCircle, MessageSquare, Calendar, Clock, Activity, ShieldAlert, BarChart3 } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
+import { Mic, MessageCircle, MessageSquare, Calendar, Clock, Activity } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import PremiumGate from '../components/PremiumGate';

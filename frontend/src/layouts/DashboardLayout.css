@@ -2,10 +2,13 @@
   display: flex;
   min-height: 100vh;
   background-color: var(--bg-primary);
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .main-content {
   flex: 1;
+  min-width: 0;
   margin-left: 260px; /* Same as sidebar width */
   display: flex;
   flex-direction: column;
@@ -14,7 +17,21 @@
 .page-content {
   padding: var(--spacing-8);
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+@media (max-width: 992px) {
+  .main-content {
+    margin-left: 0;
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .page-content {
+    padding: var(--spacing-4);
+  }
 }
 
 /* Authentication Loading Screen */

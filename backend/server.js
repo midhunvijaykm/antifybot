@@ -53,8 +53,20 @@ const server = http.createServer(app);
 // CORS
 // ==============================
 
+const allowedOrigins = [
+  'https://antifybot.pages.dev',
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  'http://localhost:5173'
+];
+
 app.use(cors({
-    origin: 'https://antifybot.pages.dev',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Dev-friendly fallback
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
@@ -117,7 +129,7 @@ app.use(hpp());
 app.set('trust proxy', 1);
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 requests per windowMs (temporarily for manual testing)
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
   message: { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -334,8 +346,7 @@ function startServer(client) {
 
 // Support both direct execution and bot.js module import
 if (require.main === module) {
-  console.warn('⚠️ Warning: backend/server.js run directly. Redirecting to start bot.js...');
-  require('../bot.js');
+  startServer();
 }
 
 module.exports = startServer;

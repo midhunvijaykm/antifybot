@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, ShieldAlert, Zap, Server, PlusCircle, Activity, AlertTriangle, Shield, FileText, UserX, History, Globe } from 'lucide-react';
+import { Users, ShieldAlert, Zap, Server, PlusCircle, Activity, FileText, UserX, History, Globe } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
@@ -28,7 +28,6 @@ const Dashboard = () => {
     dashboardStats,
     fetchDashboardStats,
     logs, 
-    guilds, 
     statsLoading, 
     logsLoading, 
     scanProgress, 
@@ -48,7 +47,7 @@ const Dashboard = () => {
       fetchDashboardStats(activeGuild.id);
       fetchUsage(activeGuild.id);
     }
-  }, [activeGuild?.id, fetchDashboardStats, fetchUsage]);
+  }, [activeGuild?.id, activeGuild?.botActive, fetchDashboardStats, fetchUsage]);
 
   const handleInviteBot = () => {
     if (!activeGuild) return;

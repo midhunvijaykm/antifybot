@@ -104,8 +104,17 @@ router.use('/analytics', ensureAuthenticated, (req, res, next) => {
   }
   next();
 });
-router.use('/scan/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
 router.use('/scan/status/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
+router.use('/scan/:guildId', (req, res, next) => {
+  if (req.params.guildId === 'status') return next();
+  ensureAuthenticated(req, res, (err) => {
+    if (err) return next(err);
+    checkGuildAdminPermission(req, res, (err2) => {
+      if (err2) return next(err2);
+      checkPremiumOrOwnerPermission(req, res, next);
+    });
+  });
+});
 router.use('/premium/:guildId', ensureAuthenticated, checkGuildAdminPermission);
 router.use('/moderation/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
 router.use('/notifications/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);

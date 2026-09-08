@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, MoreVertical, Shield, AlertTriangle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Shield, AlertTriangle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import OffenderModal from '../components/OffenderModal';
@@ -35,9 +35,9 @@ const Logs = () => {
   // Trigger fetch when parameters or guild changes
   useEffect(() => {
     if (activeGuild?.botActive) {
-      fetchLogs(activeGuild.id, 1, searchValue, filterSeverity, filterType);
+      fetchLogs(activeGuild.id, 1, '', filterSeverity, filterType);
     }
-  }, [activeGuild, filterSeverity, filterType, fetchLogs]);
+  }, [activeGuild?.id, activeGuild?.botActive, filterSeverity, filterType, fetchLogs]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
