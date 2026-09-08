@@ -324,7 +324,18 @@ async function runDetectionPipeline(message, settings) {
       if (isImg) {
         try {
           console.log(`[Scanner] OCR Analyzing old image: ${attachment.url}`);
-          const result = await Tesseract.recognize(attachment.url, 'eng');
+          let imageInput = attachment.url;
+          try {
+            const res = await axios.get(attachment.url, {
+              responseType: 'arraybuffer',
+              timeout: 10000,
+              headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AntifyBot/1.0)' }
+            });
+            imageInput = Buffer.from(res.data);
+          } catch (fetchErr) {
+            console.warn(`[Scanner] Buffer fetch failed, using direct URL:`, fetchErr.message);
+          }
+          const result = await Tesseract.recognize(imageInput, 'eng');
           const extractedText = result.data.text;
 
           const scamScore = calculateScamScore(extractedText, settings);
@@ -1475,6 +1486,75 @@ async function resumeHistoricalScan(client, guildId, moderatorId = null) {
   };
 }
 
+/**
+ * Scans recent messages across text channels in a guild and removes any undeleted scam messages.
+ * Runs on a 3-hour schedule to keep all channels free of lingering scams.
+ */
+async function cleanUndeletedScamMessages(guild, limitPerChannel = 50, alertCallback = null) {
+  if (!guild || !guild.channels) return { scanned: 0, deleted: 0 };
+  
+  const guildId = guild.id;
+  const settings = await Settings.findOne({ guildId }) || new Settings({ guildId });
+
+  let totalScanned = 0;
+  let totalDeleted = 0;
+
+  console.log(`🧹 [Auto-Cleaner] Starting 3-hour scan for guild: ${guild.name} (${guildId})...`);
+
+  // Filter text channels where bot has permission to read and manage messages
+  const channels = guild.channels.cache.filter(c => 
+    c.isTextBased() && 
+    c.permissionsFor(guild.members.me)?.has([
+      PermissionsBitField.Flags.ViewChannel,
+      PermissionsBitField.Flags.ReadMessageHistory,
+      PermissionsBitField.Flags.ManageMessages
+    ])
+  );
+
+  for (const channel of channels.values()) {
+    try {
+      if (settings.whitelistChannels && settings.whitelistChannels.includes(channel.id)) {
+        continue;
+      }
+
+      const messages = await channel.messages.fetch({ limit: limitPerChannel }).catch(() => null);
+      if (!messages || messages.size === 0) continue;
+
+      for (const msg of messages.values()) {
+        if (msg.author.bot) continue;
+
+        totalScanned++;
+        const detection = await runDetectionPipeline(msg, settings);
+        if (detection) {
+          console.log(`🚨 [Auto-Cleaner] Found undeleted scam message ${msg.id} in #${channel.name} by ${msg.author.tag}: ${detection.reason}`);
+          
+          // Delete old message from Discord
+          await msg.delete().catch(delErr => {
+            console.warn(`[Auto-Cleaner] Could not delete message ${msg.id}:`, delErr.message);
+          });
+          totalDeleted++;
+
+          // Archive, log in database, and emit Socket.io updates
+          await archiveAndActionMessage(msg, detection, 'Scheduled 3-Hour Cleaner');
+
+          // Send admin-only alert if callback provided
+          if (typeof alertCallback === 'function') {
+            await alertCallback(guild, msg, msg.author, 'Warned', detection.reason, detection.severity, detection.scamScore, detection.type, settings);
+          }
+        }
+      }
+
+      // Small delay between channels to avoid rate limits
+      await new Promise(r => setTimeout(r, 300));
+    } catch (chanErr) {
+      console.warn(`[Auto-Cleaner] Error scanning channel #${channel.name}:`, chanErr.message);
+    }
+  }
+
+  console.log(`✅ [Auto-Cleaner] Finished scan for ${guild.name}: ${totalScanned} messages checked, ${totalDeleted} undeleted scam messages removed.`);
+  return { scanned: totalScanned, deleted: totalDeleted };
+}
+
 module.exports = {
   activeScans,
   startHistoricalScan,
@@ -1485,5 +1565,7 @@ module.exports = {
   updateGuildAnalyticsDetection,
   updateUserInfraction,
   calculateScamScore,
-  shouldBypass
+  shouldBypass,
+  cleanUndeletedScamMessages,
+  runDetectionPipeline
 };

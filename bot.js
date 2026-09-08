@@ -14,7 +14,7 @@ const Tesseract = require('tesseract.js');
 const axios = require('axios');
 const startServer = require('./backend/server');
 const { Log, Warning, Punishment, Settings, Guild, HistoricalScanJob } = require('./backend/models');
-const { activeScans, startHistoricalScan, cancelHistoricalScan, resumeHistoricalScan, archiveAndActionMessage, updateGuildAnalyticsScanned, calculateScamScore, shouldBypass } = require('./backend/helpers/scanner');
+const { activeScans, startHistoricalScan, cancelHistoricalScan, resumeHistoricalScan, archiveAndActionMessage, updateGuildAnalyticsScanned, calculateScamScore, shouldBypass, cleanUndeletedScamMessages } = require('./backend/helpers/scanner');
 
 const client = new Client({
   intents: [
@@ -133,6 +133,108 @@ async function scanUrl(url, guildId) {
   }
 }
 
+/**
+ * Sends security alerts ONLY to Server Administrators and higher rank (Server Owner).
+ * Regular users in public channels will never see these security alerts.
+ */
+async function sendAdminOnlyAlert(guild, message, author, action, reason, severity = 'high', score = null, type = 'Scam', settings = null) {
+  try {
+    if (!guild) return;
+    if (!settings) {
+      settings = await Settings.findOne({ guildId: guild.id }) || new Settings({ guildId: guild.id });
+    }
+    const finalScore = score !== null ? score : (severity === 'critical' ? 98 : (severity === 'high' ? 88 : 75));
+    const alertContent = `🚨 **ANTIFY Protection Active** | ${author} was **${action.toLowerCase()}**.\nReason: *${reason}*`;
+
+    let adminChannel = null;
+
+    // 1. Check designated logging channel
+    if (settings.loggingChannelId) {
+      try {
+        const fetched = await guild.channels.fetch(settings.loggingChannelId).catch(() => null);
+        if (fetched && fetched.isTextBased()) {
+          adminChannel = fetched;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Look for existing admin-restricted channel
+    if (!adminChannel) {
+      adminChannel = guild.channels.cache.find(c => 
+        c.isTextBased() && (
+          c.name.toLowerCase().includes('admin') || 
+          c.name.toLowerCase().includes('mod-log') || 
+          c.name.toLowerCase().includes('security') || 
+          c.name.toLowerCase().includes('antify')
+        ) && c.permissionsFor(guild.roles.everyone)?.has(PermissionsBitField.Flags.ViewChannel) === false
+      );
+    }
+
+    // 3. Auto-create private admin-only security channel if none exists
+    if (!adminChannel) {
+      try {
+        adminChannel = await guild.channels.create({
+          name: 'antify-security-alerts',
+          type: 0, // GuildText
+          permissionOverwrites: [
+            {
+              id: guild.id, // @everyone role denied
+              deny: [PermissionsBitField.Flags.ViewChannel]
+            },
+            {
+              id: guild.client.user.id,
+              allow: [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.EmbedLinks
+              ]
+            }
+          ],
+          reason: 'AntifyBot private security channel visible only to administrators'
+        });
+
+        settings.loggingChannelId = adminChannel.id;
+        await settings.save().catch(console.error);
+        console.log(`[Alert] Created private admin channel #${adminChannel.name} in guild ${guild.name}`);
+      } catch (createErr) {
+        console.warn(`[Alert] Could not auto-create admin channel:`, createErr.message);
+      }
+    }
+
+    // 4. Send the alert to the admin-only channel
+    if (adminChannel && adminChannel.isTextBased()) {
+      const embed = {
+        title: `🛡️ Security Alert | Threat Handled`,
+        description: alertContent,
+        color: severity === 'critical' ? 0xff0000 : (severity === 'high' ? 0xffa500 : 0xffff00),
+        fields: [
+          { name: 'Target User', value: `${author.tag} (${author.id})`, inline: true },
+          { name: 'Channel', value: `<#${message.channelId || message.channel?.id}>`, inline: true },
+          { name: 'Action Taken', value: action, inline: true },
+          { name: 'Threat Type', value: type, inline: true },
+          { name: 'Scam Score', value: `${finalScore}%`, inline: true },
+          { name: 'Reason', value: reason },
+        ],
+        timestamp: new Date().toISOString(),
+        footer: { text: 'ANTIFY Cybersecurity Shield • Administrator & Owner View Only' }
+      };
+
+      await adminChannel.send({ content: alertContent, embeds: [embed] });
+      console.log(`[Alert] Sent admin-only alert to #${adminChannel.name}`);
+    } else {
+      // Fallback: Notify guild owner directly in DM
+      try {
+        const owner = await guild.fetchOwner();
+        if (owner) {
+          await owner.send(`🛡️ **[${guild.name}] Antify Alert (Admin-Only):**\n${alertContent}\n*Channel: #${message.channel?.name || message.channelId}*`).catch(() => {});
+        }
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.error('[Alert] Error in sendAdminOnlyAlert:', err.message);
+  }
+}
+
 // Unified Punish Function
 async function punish(message, reason, type, severity = 'high', score = null) {
   try {
@@ -174,35 +276,8 @@ async function punish(message, reason, type, severity = 'high', score = null) {
     // Archive message, save logs/detections/infractions, update analytics, emit sockets, then delete message
     await archiveAndActionMessage(message, detection);
 
-    // Send Alert to Channel
-    await message.channel.send(
-      `🚨 **ANTIFY Protection Active** | ${message.author} was **${action.toLowerCase()}**.\nReason: *${reason}*`
-    );
-
-    // Detailed moderation logging channel support
-    if (settings.loggingChannelId) {
-      try {
-        const logChannel = await message.guild.channels.fetch(settings.loggingChannelId);
-        if (logChannel && logChannel.isTextBased()) {
-          const embed = {
-            title: `🛡️ Security Alert | Threat Handled`,
-            color: severity === 'critical' ? 0xff0000 : (severity === 'high' ? 0xffa500 : 0xffff00),
-            fields: [
-              { name: 'Target User', value: `${message.author.tag} (${message.author.id})`, inline: true },
-              { name: 'Action Taken', value: action, inline: true },
-              { name: 'Threat Type', value: type, inline: true },
-              { name: 'Scam Score', value: `${finalScore}%`, inline: true },
-              { name: 'Reason', value: reason },
-            ],
-            timestamp: new Date().toISOString(),
-            footer: { text: 'ANTIFY Cybersecurity Shield' }
-          };
-          await logChannel.send({ embeds: [embed] });
-        }
-      } catch (logErr) {
-        console.error('Failed to send moderation log to designated channel:', logErr.message);
-      }
-    }
+    // Send Alert ONLY to Server Administrators and higher rank (not to public chat)
+    await sendAdminOnlyAlert(message.guild, message, message.author, action, reason, severity, finalScore, type, settings);
 
     console.log(`🛡️ Blocked ${message.author.tag} | Action: ${action} | Reason: ${reason}`);
 
@@ -212,12 +287,28 @@ async function punish(message, reason, type, severity = 'high', score = null) {
 }
 
 // ==============================
+// 3-HOUR RECURRING SCANNER
+// ==============================
+
+async function runScheduledAutoScan(clientInstance) {
+  console.log('⏰ [Auto-Scanner] Starting 3-hour scan across all active servers...');
+  for (const guild of clientInstance.guilds.cache.values()) {
+    try {
+      await cleanUndeletedScamMessages(guild, 50, sendAdminOnlyAlert);
+    } catch (guildErr) {
+      console.error(`[Auto-Scanner] Error scanning guild ${guild.name}:`, guildErr.message);
+    }
+  }
+  console.log('✅ [Auto-Scanner] 3-hour scan cycle completed.');
+}
+
+// ==============================
 // READY EVENT
 // ==============================
 
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  // Start the HTTP express + Socket.io server (configured on Port 3000 now)
+  // Start the HTTP express + Socket.io server
   startServer(client);
 
   // Resume interrupted scan jobs on boot
@@ -232,6 +323,21 @@ client.once('ready', async () => {
   } catch (resumeErr) {
     console.error('[Scanner] Failed to query scanning jobs on startup:', resumeErr.message);
   }
+
+  // 3-Hour Scheduled Scanner
+  const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+  setInterval(() => {
+    runScheduledAutoScan(client).catch(err => {
+      console.error('[Auto-Scanner] Interval error:', err.message);
+    });
+  }, THREE_HOURS_MS);
+
+  // Initial sweep 30 seconds after startup to clean up lingering undeleted scam messages
+  setTimeout(() => {
+    runScheduledAutoScan(client).catch(err => {
+      console.error('[Auto-Scanner] Initial sweep error:', err.message);
+    });
+  }, 30 * 1000);
 });
 
 // ==============================
