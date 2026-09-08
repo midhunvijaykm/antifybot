@@ -140,9 +140,9 @@ async function punish(message, reason, type, severity = 'high', score = null) {
     const settings = await Settings.findOne({ guildId }) || new Settings({ guildId });
     
     let action = 'Warned';
-    if (settings.autoBan) action = 'Banned';
-    else if (settings.autoKick) action = 'Kicked';
-    else if (settings.autoTimeout) action = 'Muted';
+    if (settings.autoBan && message.member?.bannable) action = 'Banned';
+    else if (settings.autoKick && message.member?.kickable) action = 'Kicked';
+    else if (settings.autoTimeout && message.member?.moderatable) action = 'Muted';
 
     // Execute Discord punishment action
     if (action === 'Banned') {
@@ -391,21 +391,35 @@ client.on('messageCreate', async (message) => {
       return;
     }
     for (const attachment of message.attachments.values()) {
-      if (
-        attachment.contentType?.startsWith('image')
-      ) {
+      const isImage = attachment.contentType?.startsWith('image') ||
+                      /\.(png|jpe?g|webp|gif|bmp|tiff)$/i.test(attachment.name || attachment.url);
+      if (isImage) {
         try {
-          console.log("Scanning image...");
+          console.log(`[Bot] Scanning image: ${attachment.name || attachment.url}...`);
+
+          let imageInput = attachment.url;
+          try {
+            const res = await axios.get(attachment.url, {
+              responseType: 'arraybuffer',
+              timeout: 10000,
+              headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AntifyBot/1.0)' }
+            });
+            imageInput = Buffer.from(res.data);
+          } catch (fetchErr) {
+            console.warn(`[Bot] Direct buffer fetch failed, using URL directly:`, fetchErr.message);
+          }
 
           const result = await Tesseract.recognize(
-            attachment.url,
+            imageInput,
             'eng'
           );
 
-          const extractedText = result.data.text;
+          const extractedText = result.data.text || '';
+          console.log(`[Bot] OCR extracted text:`, extractedText.replace(/\s+/g, ' ').trim().substring(0, 200));
 
           // OCR keyword scan
           const scamScore = calculateScamScore(extractedText, settings);
+          console.log(`[Bot] OCR Scam Score: ${scamScore} (Sensitivity threshold: ${sensitivity})`);
           if (scamScore >= sensitivity) {
             return punish(
               message,

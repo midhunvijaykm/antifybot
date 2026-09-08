@@ -158,24 +158,22 @@ function shouldBypass(message, member, settings) {
     return true;
   }
 
-  // 4. Permissions check (Admin, Manage Messages, Manage Guild)
-  if (member) {
-    if (member.permissions) {
-      if (
-        member.permissions.has(PermissionsBitField.Flags.Administrator) ||
-        member.permissions.has(PermissionsBitField.Flags.ManageMessages) ||
-        member.permissions.has(PermissionsBitField.Flags.ManageGuild)
-      ) {
-        return true;
-      }
+  // 4. Trusted Roles
+  if (settings.trustedRoles && settings.trustedRoles.length > 0 && member && member.roles && member.roles.cache) {
+    const hasTrustedRole = settings.trustedRoles.some(roleId => member.roles.cache.has(roleId));
+    if (hasTrustedRole) {
+      return true;
     }
+  }
 
-    // 5. Trusted Roles
-    if (settings.trustedRoles && settings.trustedRoles.length > 0 && member.roles && member.roles.cache) {
-      const hasTrustedRole = settings.trustedRoles.some(roleId => member.roles.cache.has(roleId));
-      if (hasTrustedRole) {
-        return true;
-      }
+  // 5. Explicit Admin Bypass (only if bypassAdmins is enabled and strictMode is off)
+  if (settings.bypassAdmins && !settings.strictMode && member && member.permissions) {
+    if (
+      member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+      member.permissions.has(PermissionsBitField.Flags.ManageMessages) ||
+      member.permissions.has(PermissionsBitField.Flags.ManageGuild)
+    ) {
+      return true;
     }
   }
 
